@@ -15,7 +15,7 @@ struct GitProfile {
     email: String,
     ssh_key_path: Option<String>,
     config_text: Option<String>,
-    isActive: bool,
+    is_active: bool,
     image_url: Option<String>,
     description: Option<String>,
     last_used: Option<String>,

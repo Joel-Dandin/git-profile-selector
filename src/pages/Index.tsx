@@ -25,7 +25,7 @@ const Index = () => {
   }
   
 
-  const handleSaveProfile = (profileData: Omit<GitProfile, "id" | "isActive" | "lastUsed">) => {
+  const handleSaveProfile = (profileData: Omit<GitProfile, "id" | "is_active" | "last_used">) => {
     if (editingProfile) {
       // Update existing profile
       setAllProfiles((prev) =>
@@ -46,10 +46,9 @@ const Index = () => {
       const newProfile: GitProfile = {
         ...profileData,
         id: uuidv4(),
-        isActive: false,
-        lastUsed: new Date(),
+        is_active: false,
+        last_used: new Date(),
       };
-      console.log("Here 1 " + newProfile.configText)
       addProfile(newProfile)
       setAllProfiles((prev) => [...prev, newProfile]);
       toast.success("Profile added successfully");
@@ -62,7 +61,7 @@ const Index = () => {
       prev.map((profile) => ({
         ...profile,
         isActive: profile.id === id,
-        lastUsed: profile.id === id ? new Date() : profile.lastUsed,
+        lastUsed: profile.id === id ? new Date() : profile.last_used,
       }))
     );
     
@@ -72,8 +71,8 @@ const Index = () => {
       console.log("Updating .gitconfig with:", {
         name: profile.name,
         email: profile.email,
-        sshKeyPath: profile.sshKeyPath,
-        configText: profile.configText,
+        sshKeyPath: profile.ssh_key_path,
+        configText: profile.config_text,
       });
       toast.success("Git configuration updated successfully");
     }

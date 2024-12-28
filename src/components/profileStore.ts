@@ -22,14 +22,14 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     try {
       // Update git config file
       const result = await invoke('update_git_config', {
-        configText: profile.configText
+        configText: profile.config_text
       });
       console.log(result);
 
       const updatedProfiles = get().profiles.map(p => ({
         ...p,
         isActive: p.id === profile.id,
-        lastUsed: p.id === profile.id ? new Date() : p.lastUsed
+        lastUsed: p.id === profile.id ? new Date() : p.last_used
       }));
 
       // Save to file system
@@ -48,7 +48,6 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
 
   addProfile: async (profile: GitProfile) => {
     const updatedProfiles = [...get().profiles, profile];
-    console.log("Here 2 " + profile.configText)
 
     await invoke('save_profiles', { profiles: updatedProfiles });
     set({ profiles: updatedProfiles });
@@ -85,7 +84,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       // Load profiles from file system
       const savedProfiles = await invoke<GitProfile[]>('load_profiles');
       const activeProfile = savedProfiles.find(
-        (p: GitProfile) => p.configText === currentConfig
+        (p: GitProfile) => p.config_text === currentConfig
       );
 
       set({

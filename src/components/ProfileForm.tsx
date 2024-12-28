@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 
 interface ProfileFormProps {
-  onSave: (profile: Omit<GitProfile, "id" | "isActive" | "lastUsed">) => void;
+  onSave: (profile: Omit<GitProfile, "id" | "is_active" | "last_used">) => void;
   onCancel: () => void;
   initialData?: GitProfile;
 }
@@ -16,9 +16,9 @@ interface ProfileFormProps {
 export const ProfileForm = ({ onSave, onCancel, initialData }: ProfileFormProps) => {
   const [name, setName] = useState(initialData?.name || "");
   const [email, setEmail] = useState(initialData?.email || "");
-  const [sshKeyPath, setSshKeyPath] = useState(initialData?.sshKeyPath || "");
-  const [configText, setConfigText] = useState(initialData?.configText || "");
-  const [imageUrl, setImageUrl] = useState(initialData?.imageUrl || "");
+  const [sshKeyPath, setSshKeyPath] = useState(initialData?.ssh_key_path || "");
+  const [configText, setConfigText] = useState(initialData?.config_text || "");
+  const [imageUrl, setImageUrl] = useState(initialData?.image_url || "");
   const [description, setDescription] = useState(initialData?.description || "");
 
   useEffect(() => {
@@ -45,7 +45,7 @@ ${sshKeyPath ? `[core]\n    sshCommand = "ssh -i ${sshKeyPath}"` : ""}`;
       return;
     }
 
-    onSave({ name, email, sshKeyPath, configText, imageUrl, description });
+    onSave({ name, email, ssh_key_path:sshKeyPath, config_text:configText, image_url:imageUrl, description });
     setName("");
     setEmail("");
     setSshKeyPath("");
