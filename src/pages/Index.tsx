@@ -9,86 +9,87 @@ import { toast } from "sonner";
 import { useProfileStore } from "../components/profileStore";
 
 const Index = () => {
-  const { profiles,addProfile,updateProfile,deleteProfile, setActiveProfile, initializeProfiles } = useProfileStore();
-
-  const [allProfiles, setAllProfiles] = useState<GitProfile[]>([]);
+  const { 
+    profiles, 
+    addProfile, 
+    updateProfile, 
+    deleteProfile, 
+    setActiveProfile, 
+    initializeProfiles 
+  } = useProfileStore();
   const [showForm, setShowForm] = useState(false);
   const [editingProfile, setEditingProfile] = useState<GitProfile | null>(null);
-
-  // useEffect(() => {
-  //   initializeProfiles().catch(error => {
-  //     toast.error("Failed to initialize profiles")
-  //   });
-  // }, []);
-  if(profiles.length > 0){
-    setAllProfiles(profiles)
-  }
+  // Initialize profiles on component mount
+  useEffect(() => {
+    initializeProfiles().catch(_error => {
+      toast.error("Failed to initialize profiles");
+    });
+  }, []);
   
 
-  const handleSaveProfile = (profileData: Omit<GitProfile, "id" | "is_active" | "last_used">) => {
-    if (editingProfile) {
-      // Update existing profile
-      setAllProfiles((prev) =>
-        prev.map((profile) =>
-          profile.id === editingProfile.id
-            ? {
-                ...profile,
-                ...profileData,
-                lastUsed: new Date(),
-              }
-            : profile
-        )
-      );
+  const handleSaveProfile = async (profileData: Omit<GitProfile, "id" | "is_active" | "last_used">) => {
+    try {
+      if (editingProfile) {
+        // Update existing profile
+        const updatedProfile: GitProfile = {
+          ...editingProfile,
+          ...profileData,
+          last_used: new Date(),
+        };
+        await updateProfile(updatedProfile);
+        toast.success("Profile updated successfully");
+      } else {
+        // Create new profile
+        const newProfile: GitProfile = {
+          ...profileData,
+          id: uuidv4(),
+          is_active: false,
+          last_used: new Date(),
+        };
+        await addProfile(newProfile);
+        toast.success("Profile added successfully");
+      }
       setEditingProfile(null);
-      toast.success("Profile updated successfully");
-    } else {
-      // Create new profile
-      const newProfile: GitProfile = {
-        ...profileData,
-        id: uuidv4(),
-        is_active: false,
-        last_used: new Date(),
-      };
-      addProfile(newProfile)
-      setAllProfiles((prev) => [...prev, newProfile]);
-      toast.success("Profile added successfully");
+      setShowForm(false);
+    } catch (error) {
+      toast.error("Failed to save profile");
     }
-    setShowForm(false);
   };
 
-  const handleActivateProfile = (id: string) => {
-    setAllProfiles((prev) =>
-      prev.map((profile) => ({
-        ...profile,
-        isActive: profile.id === id,
-        lastUsed: profile.id === id ? new Date() : profile.last_used,
-      }))
-    );
-    
-    const profile = allProfiles.find((p) => p.id === id);
-    if (profile) {
-      setActiveProfile(profile)
-      console.log("Updating .gitconfig with:", {
-        name: profile.name,
-        email: profile.email,
-        sshKeyPath: profile.ssh_key_path,
-        configText: profile.config_text,
+  const handleActivateProfile = async (id: string) => {
+    const activeProfiles = profiles.filter((p) => p.is_active === true);
+    if (activeProfiles.length > 0) {
+      activeProfiles.forEach(profile => {
+        profile.is_active = false;
       });
-      toast.success("Git configuration updated successfully");
+    }
+    
+    try {
+      const profile = profiles.find((p) => p.id === id);
+      if (profile) {
+        profile.is_active = true;
+        await setActiveProfile(profile);
+        toast.success("Git configuration updated successfully");
+      }
+    } catch (error) {
+      toast.error("Failed to activate profile");
     }
   };
 
-  const handleDeleteProfile = (id: string) => {
-    setAllProfiles((prev) => prev.filter((profile) => profile.id !== id));
-    deleteProfile(id)
-    toast.success("Profile deleted successfully");
+  const handleDeleteProfile = async (id: string) => {
+    try {
+      await deleteProfile(id);
+      toast.success("Profile deleted successfully");
+    } catch (error) {
+      toast.error("Failed to delete profile");
+    }
   };
 
   const handleEditProfile = (profile: GitProfile) => {
     setEditingProfile(profile);
-    updateProfile(profile);
     setShowForm(true);
   };
+
 
   return (
     <div className="min-h-screen bg-github-gray">
@@ -99,14 +100,17 @@ const Index = () => {
               GitHub Profile Switcher
             </h1>
             {!showForm && (
-              <Button onClick={() => setShowForm(true)} className="bg-github-green hover:bg-github-green/90">
+              <Button 
+                onClick={() => setShowForm(true)} 
+                className="bg-github-green hover:bg-github-green/90"
+              >
                 <Plus className="w-4 h-4 mr-2" />
                 Add Profile
               </Button>
             )}
           </div>
 
-          {showForm ? (
+          {showForm && (
             <div className="bg-white p-6 rounded-lg shadow-sm mb-6">
               <h2 className="text-xl font-semibold mb-4">
                 {editingProfile ? "Edit Profile" : "Add New Profile"}
@@ -120,10 +124,10 @@ const Index = () => {
                 initialData={editingProfile || undefined}
               />
             </div>
-          ) : null}
+          )}
 
           <div className="space-y-4">
-            {allProfiles.length === 0 && !showForm ? (
+            {profiles.length === 0 && !showForm ? (
               <div className="text-center py-12 bg-white rounded-lg">
                 <h2 className="text-xl font-semibold text-gray-600">
                   No profiles yet
@@ -133,7 +137,7 @@ const Index = () => {
                 </p>
               </div>
             ) : (
-              allProfiles.map((profile) => (
+              profiles.map((profile) => (
                 <ProfileCard
                   key={profile.id}
                   profile={profile}

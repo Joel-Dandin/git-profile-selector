@@ -6,7 +6,7 @@ use tauri::command;
 use std::io::Write;
 use serde::{Deserialize, Serialize};
 
-const PROFILES_DIR: &str = "C:/Users/JOQ2KOR/Downloads/Gitconfig";
+const PROFILES_DIR: &str = "C:/Custom App/GitConfig";
 
 #[derive(Serialize, Deserialize, Clone)]
 struct GitProfile {
