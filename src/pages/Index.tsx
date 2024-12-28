@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { GitProfile } from "../types/profile";
 import { ProfileForm } from "../components/ProfileForm";
@@ -6,16 +6,29 @@ import { ProfileCard } from "../components/ProfileCard";
 import { Button } from "../components/ui/button";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
+import { useProfileStore } from "../components/profileStore";
 
 const Index = () => {
-  const [profiles, setProfiles] = useState<GitProfile[]>([]);
+  const { profiles,addProfile,updateProfile,deleteProfile, setActiveProfile, initializeProfiles } = useProfileStore();
+
+  const [allProfiles, setAllProfiles] = useState<GitProfile[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingProfile, setEditingProfile] = useState<GitProfile | null>(null);
+
+  // useEffect(() => {
+  //   initializeProfiles().catch(error => {
+  //     toast.error("Failed to initialize profiles")
+  //   });
+  // }, []);
+  if(profiles.length > 0){
+    setAllProfiles(profiles)
+  }
+  
 
   const handleSaveProfile = (profileData: Omit<GitProfile, "id" | "isActive" | "lastUsed">) => {
     if (editingProfile) {
       // Update existing profile
-      setProfiles((prev) =>
+      setAllProfiles((prev) =>
         prev.map((profile) =>
           profile.id === editingProfile.id
             ? {
@@ -36,15 +49,16 @@ const Index = () => {
         isActive: false,
         lastUsed: new Date(),
       };
-
-      setProfiles((prev) => [...prev, newProfile]);
+      console.log("Here 1 " + newProfile.configText)
+      addProfile(newProfile)
+      setAllProfiles((prev) => [...prev, newProfile]);
       toast.success("Profile added successfully");
     }
     setShowForm(false);
   };
 
   const handleActivateProfile = (id: string) => {
-    setProfiles((prev) =>
+    setAllProfiles((prev) =>
       prev.map((profile) => ({
         ...profile,
         isActive: profile.id === id,
@@ -52,8 +66,9 @@ const Index = () => {
       }))
     );
     
-    const profile = profiles.find((p) => p.id === id);
+    const profile = allProfiles.find((p) => p.id === id);
     if (profile) {
+      setActiveProfile(profile)
       console.log("Updating .gitconfig with:", {
         name: profile.name,
         email: profile.email,
@@ -65,12 +80,14 @@ const Index = () => {
   };
 
   const handleDeleteProfile = (id: string) => {
-    setProfiles((prev) => prev.filter((profile) => profile.id !== id));
+    setAllProfiles((prev) => prev.filter((profile) => profile.id !== id));
+    deleteProfile(id)
     toast.success("Profile deleted successfully");
   };
 
   const handleEditProfile = (profile: GitProfile) => {
     setEditingProfile(profile);
+    updateProfile(profile);
     setShowForm(true);
   };
 
@@ -107,7 +124,7 @@ const Index = () => {
           ) : null}
 
           <div className="space-y-4">
-            {profiles.length === 0 && !showForm ? (
+            {allProfiles.length === 0 && !showForm ? (
               <div className="text-center py-12 bg-white rounded-lg">
                 <h2 className="text-xl font-semibold text-gray-600">
                   No profiles yet
@@ -117,7 +134,7 @@ const Index = () => {
                 </p>
               </div>
             ) : (
-              profiles.map((profile) => (
+              allProfiles.map((profile) => (
                 <ProfileCard
                   key={profile.id}
                   profile={profile}
