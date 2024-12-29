@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Textarea } from "../components/ui/textarea";
 import { Link } from "react-router-dom";
 import { Sheet, SheetContent, SheetTrigger } from "../components/ui/sheet";
+import { invoke } from '@tauri-apps/api/core';
 
 const Index = () => {
   const {
@@ -26,19 +27,19 @@ const Index = () => {
   const [currentConfig, setCurrentConfig] = useState("");
 
   useEffect(() => {
-    // Simulated reading of .gitconfig file
-    // In a real application, this would need backend support
-    const mockConfig = `[user]
-    name = Current User
-    email = current@github.com
-[core]
-    editor = vim
-    whitespace = fix,-indent-with-non-tab,trailing-space,cr-at-eol`;
-    setCurrentConfig(mockConfig);
-  }, []);
+    // Load the actual .gitconfig content
+    const loadGitConfig = async () => {
+      try {
+        const config = await invoke<string>("read_git_config");
+        setCurrentConfig(config);
+      } catch (error) {
+        console.error("Failed to read git config:", error);
+        toast.error("Failed to read Git configuration");
+        setCurrentConfig("# Failed to load .gitconfig");
+      }
+    };
 
-  // Initialize profiles on component mount
-  useEffect(() => {
+    loadGitConfig();
     initializeProfiles().catch(_error => {
       toast.error("Failed to initialize profiles");
     });
@@ -174,15 +175,18 @@ const Index = () => {
                 </p>
               </div>
             ) : (
-              profiles.map((profile) => (
-                <ProfileCard
-                  key={profile.id}
-                  profile={profile}
-                  onActivate={handleActivateProfile}
-                  onDelete={handleDeleteProfile}
-                  onEdit={handleEditProfile}
-                />
-              ))
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {profiles.map((profile) => (
+                  <ProfileCard
+                    key={profile.id}
+                    profile={profile}
+                    onActivate={handleActivateProfile}
+                    onDelete={handleDeleteProfile}
+                    onEdit={handleEditProfile}
+                  />
+                ))}
+              </div>
+
             )}
           </div>
         </div>

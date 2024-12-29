@@ -1,19 +1,54 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
-import { Moon, Sun, Folder, ArrowLeft } from "lucide-react";
+import { Moon, Sun, ArrowLeft } from "lucide-react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
+import { invoke } from '@tauri-apps/api/core';
+
+interface AppConfig {
+  profiles_dir: string;
+  theme: string;
+  backup_enabled: boolean;
+  auto_backup_interval: number;
+}
 
 const Settings = () => {
   const { theme, setTheme } = useTheme();
-  const [profilesPath, setProfilesPath] = useState(localStorage.getItem("profilesPath") || "");
-  const handleSaveProfilesPath = () => {
-    localStorage.setItem("profilesPath", profilesPath);
-    toast.success("Profiles path updated successfully");
+  const [config, setConfig] = useState<AppConfig | null>(null);
+  const [profilesPath, setProfilesPath] = useState("");
+
+  useEffect(() => {
+    loadConfig();
+  }, []);
+
+  const loadConfig = async () => {
+    try {
+      const appConfig = await invoke<AppConfig>("get_app_config");
+      setConfig(appConfig);
+      setProfilesPath(appConfig.profiles_dir);
+    } catch (error) {
+      toast.error("Failed to load configuration");
+    }
+  };
+
+  const handleSaveProfilesPath = async () => {
+    if (!config) return;
+
+    try {
+      await invoke("update_app_config", {
+        config: {
+          ...config,
+          profiles_dir: profilesPath
+        }
+      });
+      toast.success("Profiles path updated successfully");
+    } catch (error) {
+      toast.error("Failed to update profiles path");
+    }
   };
   return (
     <div className="container py-8 transition-colors duration-200">
@@ -38,10 +73,16 @@ const Settings = () => {
                 variant="outline"
                 size="icon"
                 onClick={() => {
-                  console.log("Current theme:", theme);
                   const newTheme = theme === "dark" ? "light" : "dark";
-                  console.log("Setting theme to:", newTheme);
                   setTheme(newTheme);
+                  if (config) {
+                    invoke("update_app_config", {
+                      config: {
+                        ...config,
+                        theme: newTheme
+                      }
+                    });
+                  }
                 }}
               >
                 {theme === "dark" ? (

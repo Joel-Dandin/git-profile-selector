@@ -5,8 +5,17 @@ use chrono::Local;
 use tauri::command;
 use std::io::Write;
 use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
+use once_cell::sync::Lazy;
 
-const PROFILES_DIR: &str = "C:/Custom App/GitConfig";
+// App configuration structure
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AppConfig {
+    profiles_dir: String,
+    theme: String,
+    backup_enabled: bool,
+    auto_backup_interval: u32, // in minutes
+}
 
 #[derive(Serialize, Deserialize, Clone)]
 struct GitProfile {
@@ -20,18 +29,25 @@ struct GitProfile {
     description: Option<String>,
     last_used: Option<String>,
 }
+// Global configuration state
+static APP_CONFIG: Lazy<Mutex<AppConfig>> = Lazy::new(|| {
+    Mutex::new(load_config().unwrap_or_default())
+});
 
 #[command]
 async fn ensure_profiles_dir() -> Result<(), String> {
-    fs::create_dir_all(PROFILES_DIR)
+    let profiles_dir = get_profiles_dir().await?;
+    fs::create_dir_all(&profiles_dir)
         .map_err(|e| format!("Failed to create profiles directory: {}", e))?;
     Ok(())
 }
 
 #[command]
 async fn save_profiles(profiles: Vec<GitProfile>) -> Result<(), String> {
+    let profiles_dir = get_profiles_dir().await?;
     ensure_profiles_dir().await?;
-    let profiles_file = format!("{}/profiles.json", PROFILES_DIR);
+    
+    let profiles_file = PathBuf::from(&profiles_dir).join("profiles.json");
     let json = serde_json::to_string_pretty(&profiles)
         .map_err(|e| format!("Failed to serialize profiles: {}", e))?;
     
@@ -43,10 +59,12 @@ async fn save_profiles(profiles: Vec<GitProfile>) -> Result<(), String> {
 
 #[command]
 async fn load_profiles() -> Result<Vec<GitProfile>, String> {
+    let profiles_dir = get_profiles_dir().await?;
     ensure_profiles_dir().await?;
-    let profiles_file = format!("{}/profiles.json", PROFILES_DIR);
     
-    if !PathBuf::from(&profiles_file).exists() {
+    let profiles_file = PathBuf::from(&profiles_dir).join("profiles.json");
+    
+    if !profiles_file.exists() {
         return Ok(Vec::new());
     }
     
@@ -59,17 +77,21 @@ async fn load_profiles() -> Result<Vec<GitProfile>, String> {
 
 #[command]
 async fn update_git_config(config_text: String) -> Result<String, String> {
+    let profiles_dir = get_profiles_dir().await?;
     let home_dir = dirs::home_dir().ok_or("Could not find home directory")?;
     let git_config_path = home_dir.join(".gitconfig");
     let old_config_path = home_dir.join("old.gitconfig");
-    let backup_path = PathBuf::from(format!(
-        "{}/backups/backup_{}.gitconfig",
-        PROFILES_DIR,
-        Local::now().format("%Y%m%d_%H%M%S")
-    ));
+    
+    // Create backup directory path using the configured profiles directory
+    let backup_path = PathBuf::from(&profiles_dir)
+        .join("backups")
+        .join(format!(
+            "backup_{}.gitconfig",
+            Local::now().format("%Y%m%d_%H%M%S")
+        ));
 
     // Create backups directory if it doesn't exist
-    fs::create_dir_all(format!("{}/backups", PROFILES_DIR))
+    fs::create_dir_all(PathBuf::from(&profiles_dir).join("backups"))
         .map_err(|e| format!("Failed to create backups directory: {}", e))?;
 
     // Read current .gitconfig if it exists
@@ -105,16 +127,95 @@ async fn update_git_config(config_text: String) -> Result<String, String> {
     }
 }
 
+impl Default for AppConfig {
+    fn default() -> Self {
+        let default_profiles_dir = dirs::document_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("GitProfileManager")
+            .to_string_lossy()
+            .to_string();
+
+        Self {
+            profiles_dir: default_profiles_dir,
+            theme: "system".to_string(),
+            backup_enabled: true,
+            auto_backup_interval: 60,
+        }
+    }
+}
+
+
+
+fn get_config_file_path() -> PathBuf {
+    dirs::document_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("GitProfileManager")
+        .join("config.json")
+}
+
+fn load_config() -> Result<AppConfig, String> {
+    let config_path = get_config_file_path();
+    
+    if !config_path.exists() {
+        let config = AppConfig::default();
+        save_config(&config)?;
+        return Ok(config);
+    }
+
+    let config_str = fs::read_to_string(&config_path)
+        .map_err(|e| format!("Failed to read config file: {}", e))?;
+    
+    serde_json::from_str(&config_str)
+        .map_err(|e| format!("Failed to parse config file: {}", e))
+}
+
+fn save_config(config: &AppConfig) -> Result<(), String> {
+    let config_path = get_config_file_path();
+    
+    // Create directory if it doesn't exist
+    if let Some(parent) = config_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create config directory: {}", e))?;
+    }
+    
+    let config_str = serde_json::to_string_pretty(config)
+        .map_err(|e| format!("Failed to serialize config: {}", e))?;
+    
+    fs::write(&config_path, config_str)
+        .map_err(|e| format!("Failed to write config file: {}", e))
+}
+
+#[command]
+async fn get_app_config() -> Result<AppConfig, String> {
+    let config = APP_CONFIG.lock().map_err(|e| e.to_string())?;
+    Ok(config.clone())
+}
+
+#[command]
+async fn update_app_config(config: AppConfig) -> Result<(), String> {
+    let mut current_config = APP_CONFIG.lock().map_err(|e| e.to_string())?;
+    *current_config = config.clone();
+    save_config(&config)
+}
+
 #[command]
 async fn read_git_config() -> Result<String, String> {
-    let home_dir = dirs::home_dir().ok_or("Could not find home directory")?;
+    let home_dir = dirs::home_dir()
+        .ok_or_else(|| "Could not find home directory".to_string())?;
     let git_config_path = home_dir.join(".gitconfig");
     
     if git_config_path.exists() {
-        fs::read_to_string(&git_config_path).map_err(|e| e.to_string())
+        fs::read_to_string(&git_config_path)
+            .map_err(|e| format!("Failed to read .gitconfig: {}", e))
     } else {
-        Ok(String::new())
+        Ok("# No .gitconfig file found in home directory".to_string())
     }
+}
+
+#[command]
+async fn get_profiles_dir() -> Result<String, String> {
+    let config = APP_CONFIG.lock().map_err(|e| e.to_string())?;
+    Ok(config.profiles_dir.clone())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -126,7 +227,9 @@ pub fn run() {
             save_profiles,
             load_profiles,
             ensure_profiles_dir, 
-            read_git_config])
+            get_app_config,
+            update_app_config,
+            get_profiles_dir,])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
