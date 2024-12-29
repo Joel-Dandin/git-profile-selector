@@ -58,14 +58,14 @@ export const ProfileCard = ({ profile, onActivate, onDelete, onEdit }: ProfileCa
       </CardHeader>
       <CardContent>
         <div className="space-y-2">
-          <p className="text-sm text-gray-500">Email: {profile.email}</p>
+          <p className="text-sm text-gray-500 dark:text-gray-200">Email: {profile.email}</p>
           {profile.ssh_key_path && (
-            <p className="text-sm text-gray-500">SSH Key: {profile.ssh_key_path}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-200" >SSH Key: {profile.ssh_key_path}</p>
           )}
           <div className="mt-4">
             <Textarea
               value={profile.config_text}
-              className="font-mono text-sm h-32 bg-gray-50"
+              className="font-mono text-sm h-32 bg-gray-50 dark:bg-background dark:text-white"
               readOnly
             />
           </div>
