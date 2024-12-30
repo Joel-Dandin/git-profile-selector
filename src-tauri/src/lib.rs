@@ -7,6 +7,7 @@ use std::io::Write;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use once_cell::sync::Lazy;
+use opener;
 
 // App configuration structure
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -29,6 +30,7 @@ struct GitProfile {
     description: Option<String>,
     last_used: Option<String>,
 }
+
 // Global configuration state
 static APP_CONFIG: Lazy<Mutex<AppConfig>> = Lazy::new(|| {
     Mutex::new(load_config().unwrap_or_default())
@@ -80,19 +82,10 @@ async fn update_git_config(config_text: String) -> Result<String, String> {
     let profiles_dir = get_profiles_dir().await?;
     let home_dir = dirs::home_dir().ok_or("Could not find home directory")?;
     let git_config_path = home_dir.join(".gitconfig");
-    let old_config_path = home_dir.join("old.gitconfig");
     
-    // Create backup directory path using the configured profiles directory
-    let backup_path = PathBuf::from(&profiles_dir)
-        .join("backups")
-        .join(format!(
-            "backup_{}.gitconfig",
-            Local::now().format("%Y%m%d_%H%M%S")
-        ));
-
-    // Create backups directory if it doesn't exist
-    fs::create_dir_all(PathBuf::from(&profiles_dir).join("backups"))
-        .map_err(|e| format!("Failed to create backups directory: {}", e))?;
+    // Get backup setting from config
+    let config = APP_CONFIG.lock().map_err(|e| e.to_string())?;
+    let backup_enabled = config.backup_enabled;
 
     // Read current .gitconfig if it exists
     let current_config = if git_config_path.exists() {
@@ -101,20 +94,26 @@ async fn update_git_config(config_text: String) -> Result<String, String> {
         String::new()
     };
 
-    // Always create a backup
-    if git_config_path.exists() {
+    // Only create backups if enabled
+    if backup_enabled && git_config_path.exists() {
+        let backup_path = PathBuf::from(&profiles_dir)
+            .join("backups")
+            .join(format!(
+                "backup_{}.gitconfig",
+                Local::now().format("%Y%m%d_%H%M%S")
+            ));
+
+        // Create backups directory if it doesn't exist
+        fs::create_dir_all(PathBuf::from(&profiles_dir).join("backups"))
+            .map_err(|e| format!("Failed to create backups directory: {}", e))?;
+
+        // Create backup
         fs::copy(&git_config_path, &backup_path)
             .map_err(|e| format!("Failed to create backup: {}", e))?;
     }
 
     // Compare and update if different
     if current_config != config_text {
-        // Save current as old if it exists and is different
-        if git_config_path.exists() {
-            fs::copy(&git_config_path, &old_config_path)
-                .map_err(|e| format!("Failed to create old config: {}", e))?;
-        }
-
         // Write new config
         let mut file = fs::File::create(&git_config_path)
             .map_err(|e| format!("Failed to create .gitconfig: {}", e))?;
@@ -125,6 +124,19 @@ async fn update_git_config(config_text: String) -> Result<String, String> {
     } else {
         Ok("Git config is already up to date".to_string())
     }
+}
+
+#[command]
+async fn open_git_config() -> Result<(), String> {
+    let home_dir = dirs::home_dir().ok_or("Could not find home directory")?;
+    let git_config_path = home_dir.join(".gitconfig");
+    
+    if !git_config_path.exists() {
+        return Err("Git config file does not exist".to_string());
+    }
+
+    opener::open(git_config_path)
+        .map_err(|e| format!("Failed to open git config: {}", e))
 }
 
 impl Default for AppConfig {
@@ -143,8 +155,6 @@ impl Default for AppConfig {
         }
     }
 }
-
-
 
 fn get_config_file_path() -> PathBuf {
     dirs::document_dir()
@@ -229,7 +239,8 @@ pub fn run() {
             ensure_profiles_dir, 
             get_app_config,
             update_app_config,
-            get_profiles_dir,])
+            get_profiles_dir,
+            open_git_config])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

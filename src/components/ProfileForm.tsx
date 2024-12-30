@@ -22,7 +22,7 @@ export const ProfileForm = ({ onSave, onCancel, initialData }: ProfileFormProps)
   const [description, setDescription] = useState(initialData?.description || "");
 
   useEffect(() => {
-    if (!configText || !initialData) {
+    if (!initialData) {
       const newConfigText = `[user]
     name = ${name}
     email = ${email}
@@ -30,7 +30,7 @@ ${sshKeyPath ? `[core]\n    sshCommand = "ssh -i ${sshKeyPath}"` : ""}`;
       
       setConfigText(newConfigText);
     }
-  }, [name, email, sshKeyPath, initialData, configText]);
+  }, [name, email, sshKeyPath, initialData]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,12 +46,6 @@ ${sshKeyPath ? `[core]\n    sshCommand = "ssh -i ${sshKeyPath}"` : ""}`;
     }
 
     onSave({ name, email, ssh_key_path:sshKeyPath, config_text:configText, image_url:imageUrl, description });
-    setName("");
-    setEmail("");
-    setSshKeyPath("");
-    setConfigText("");
-    setImageUrl("");
-    setDescription("");
   };
 
   return (
@@ -118,7 +112,13 @@ ${sshKeyPath ? `[core]\n    sshCommand = "ssh -i ${sshKeyPath}"` : ""}`;
           placeholder="[user]
     name = Your Name
     email = your@email.com"
+    readOnly={!initialData}
         />
+        {!initialData && (
+          <p className="text-sm text-muted-foreground mt-1">
+            Config text will be editable after profile creation
+          </p>
+        )}
       </div>
       <div className="flex justify-end space-x-2">
         <Button type="button" variant="outline" onClick={onCancel}>

@@ -8,6 +8,8 @@ import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { invoke } from '@tauri-apps/api/core';
+import { Switch } from "../components/ui/switch";
+
 
 interface AppConfig {
   profiles_dir: string;
@@ -20,7 +22,7 @@ const Settings = () => {
   const { theme, setTheme } = useTheme();
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [profilesPath, setProfilesPath] = useState("");
-
+  const [backupEnabled, setBackupEnabled] = useState<Boolean>(true);
   useEffect(() => {
     loadConfig();
   }, []);
@@ -30,6 +32,7 @@ const Settings = () => {
       const appConfig = await invoke<AppConfig>("get_app_config");
       setConfig(appConfig);
       setProfilesPath(appConfig.profiles_dir);
+      setBackupEnabled(appConfig.backup_enabled);
     } catch (error) {
       toast.error("Failed to load configuration");
     }
@@ -50,6 +53,26 @@ const Settings = () => {
       toast.error("Failed to update profiles path");
     }
   };
+
+  const handleBackupToggle = async (enabled: boolean) => {
+    try {
+      setBackupEnabled(enabled);
+      if (config) {
+        await invoke("update_app_config", {
+          config: {
+            ...config,
+            backup_enabled: enabled
+          }
+        });
+        toast.success(`Backup ${enabled ? 'enabled' : 'disabled'}`);
+      }
+    } catch (error) {
+      toast.error("Failed to update backup settings");
+      // Revert the UI state if the update failed
+      setBackupEnabled(!enabled);
+    }
+  };
+
   return (
     <div className="container py-8 transition-colors duration-200">
       <div className="max-w-2xl mx-auto space-y-6">
@@ -114,6 +137,19 @@ const Settings = () => {
               <p className="text-sm text-muted-foreground">
                 This is where your Git profile configurations will be stored
               </p>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="backup">Backup Configurations</Label>
+                <p className="text-sm text-muted-foreground">
+                  Create backup files before making changes
+                </p>
+              </div>
+              <Switch
+                id="backup"
+                checked={backupEnabled}
+                onCheckedChange={handleBackupToggle}
+              />
             </div>
           </CardContent>
         </Card>

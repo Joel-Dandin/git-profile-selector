@@ -6,6 +6,7 @@ import { Textarea } from "../components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import { Trash2, Check, Edit2, Download, Clock } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { AlertDialogHeader, AlertDialogFooter, AlertDialogTrigger, AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescription, AlertDialogCancel, AlertDialogAction } from "./ui/alert-dialog";
 
 interface ProfileCardProps {
   profile: GitProfile;
@@ -96,14 +97,31 @@ export const ProfileCard = ({ profile, onActivate, onDelete, onEdit }: ProfileCa
               <Download className="w-4 h-4 mr-2" />
               Export
             </Button>
-            <Button
-              onClick={() => onDelete(profile.id)}
-              variant="destructive"
-              className="flex items-center"
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Delete
-            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="destructive"
+                  className="flex items-center"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete Profile</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Are you sure you want to delete the profile "{profile.name}"? This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => onDelete(profile.id)}>
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         </div>
       </CardContent>

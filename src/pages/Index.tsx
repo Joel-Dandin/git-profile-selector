@@ -4,7 +4,7 @@ import { GitProfile } from "../types/profile";
 import { ProfileForm } from "../components/ProfileForm";
 import { ProfileCard } from "../components/ProfileCard";
 import { Button } from "../components/ui/button";
-import { Plus, Settings } from "lucide-react";
+import { Plus, Settings, RefreshCcw, FileEdit, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { useProfileStore } from "../components/profileStore";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
@@ -12,6 +12,7 @@ import { Textarea } from "../components/ui/textarea";
 import { Link } from "react-router-dom";
 import { Sheet, SheetContent, SheetTrigger } from "../components/ui/sheet";
 import { invoke } from '@tauri-apps/api/core';
+import { Badge } from "../components/ui/badge";
 
 const Index = () => {
   const {
@@ -25,25 +26,58 @@ const Index = () => {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [editingProfile, setEditingProfile] = useState<GitProfile | null>(null);
   const [currentConfig, setCurrentConfig] = useState("");
+  const [configStatus, setConfigStatus] = useState<"match" | "modified" | "unknown">("unknown");
+
+  const loadGitConfig = async () => {
+    try {
+      const config = await invoke<string>("read_git_config");
+      await setCurrentConfig(config);
+      await checkConfigStatus(config);
+    } catch (error) {
+      console.error("Failed to read git config:", error);
+      toast.error("Failed to read Git configuration");
+      setCurrentConfig("# Failed to load .gitconfig");
+    }
+  };
 
   useEffect(() => {
     // Load the actual .gitconfig content
-    const loadGitConfig = async () => {
-      try {
-        const config = await invoke<string>("read_git_config");
-        setCurrentConfig(config);
-      } catch (error) {
-        console.error("Failed to read git config:", error);
-        toast.error("Failed to read Git configuration");
-        setCurrentConfig("# Failed to load .gitconfig");
-      }
-    };
 
     loadGitConfig();
     initializeProfiles().catch(_error => {
       toast.error("Failed to initialize profiles");
     });
   }, []);
+
+  const checkConfigStatus = (config: string) => {
+    const activeProfile = profiles.find(p => p.is_active);
+    if (!activeProfile) {
+      setConfigStatus("unknown");
+      return;
+    }
+  
+    // Simple comparison - in real app would need more sophisticated comparison
+    setConfigStatus(config === activeProfile.config_text ? "match" : "modified");
+  };
+
+  const handleRefreshConfig = async () => {
+    // In a real app, this would fetch from the actual .gitconfig file
+    toast.info("Refreshing configuration...");
+    // const config = await invoke<string>("read_git_config");
+    // setCurrentConfig(config);
+    // checkConfigStatus(config);
+    await loadGitConfig()
+    toast.success("Configuration refreshed");
+  };
+
+  const handleOpenInNotepad = async () => {
+    try {
+      await invoke('open_git_config');
+      toast.success("Opening Git config in default editor");
+    } catch (error) {
+      toast.error("Failed to open Git config file");
+    }
+  };
 
 
   const handleSaveProfile = async (profileData: Omit<GitProfile, "id" | "is_active" | "last_used">) => {
@@ -88,6 +122,8 @@ const Index = () => {
       if (profile) {
         profile.is_active = true;
         await setActiveProfile(profile);
+        // checkConfigStatus(profile.config_text);
+        await loadGitConfig()
         toast.success("Git configuration updated successfully");
       }
     } catch (error) {
@@ -108,12 +144,13 @@ const Index = () => {
     setEditingProfile(profile);
     setIsDrawerOpen(true);
   };
+
   const handleEditProfileClose = () => {
     setEditingProfile(null);
     setIsDrawerOpen(false);
   };
 
-
+  // handleRefreshConfig()
   return (
     <div className="min-h-screen bg-background/95 backdrop-blur-sm transition-colors duration-200">
       <div className="container py-8">
@@ -154,7 +191,46 @@ const Index = () => {
           </div>
           <Card className="mb-8">
             <CardHeader>
-              <CardTitle>Current Git Configuration</CardTitle>
+            <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <CardTitle>Current Git Configuration</CardTitle>
+                  {configStatus === "modified" && (
+                    <Badge variant="destructive" className="flex items-center">
+                      <AlertTriangle className="w-3 h-3 mr-1" />
+                      Modified
+                    </Badge>
+                  )}
+                  {configStatus === "match" && (
+                    <Badge variant="default" className="bg-github-green">
+                      Matches Active Profile
+                    </Badge>
+                  )}
+                  {configStatus === "unknown" && (
+                    <Badge variant="destructive" className="bg-yellow-500">
+                      <AlertTriangle className="w-3 h-3 mr-1" />
+                      Error: No Active Profile
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex space-x-2">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={handleRefreshConfig}
+                    title="Refresh Configuration"
+                  >
+                    <RefreshCcw className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={handleOpenInNotepad}
+                    title="Open in Text Editor"
+                  >
+                    <FileEdit className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               <Textarea
