@@ -24,7 +24,7 @@ const Settings = () => {
   const { theme, setTheme } = useTheme();
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [profilesPath, setProfilesPath] = useState("");
-  const [backupEnabled, setBackupEnabled] = useState<Boolean>(true);
+  const [backupEnabled, setBackupEnabled] = useState<boolean>(true);
   const [encryptionKey, setEncryptionKey] = useState("");
   const [isEncryptionSetup, setIsEncryptionSetup] = useState(false);
   const [showKey, setShowKey] = useState(false);
@@ -44,14 +44,6 @@ const Settings = () => {
     }
   };
 
-  const checkEncryptionStatus = async () => {
-    try {
-      const isSetup = await invoke<boolean>("is_encryption_setup");
-      setIsEncryptionSetup(isSetup);
-    } catch (error) {
-      toast.error("Failed to check encryption status");
-    }
-  };
 
   const handleUpdateEncryption = async () => {
     if (!encryptionKey) {

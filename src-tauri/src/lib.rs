@@ -9,7 +9,7 @@ use std::sync::Mutex;
 use once_cell::sync::Lazy;
 use opener;
 mod encryption; // Add this at the top
-use crate::encryption::{write_encrypted_file, read_encrypted_file, set_encryption_key};
+use crate::encryption::{encrypt_string, decrypt_string, set_encryption_key};
 
 // App configuration structure
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -56,7 +56,10 @@ async fn save_profiles(profiles: Vec<GitProfile>) -> Result<(), String> {
     let json = serde_json::to_string_pretty(&profiles)
         .map_err(|e| format!("Failed to serialize profiles: {}", e))?;
     
-    write_encrypted_file(&profiles_file, &json)
+    // Encrypt the profiles data
+    let encrypted = encrypt_string(&json)?;
+    fs::write(&profiles_file, encrypted)
+        .map_err(|e| format!("Failed to write profiles file: {}", e))
 }
 
 #[command]
@@ -70,7 +73,11 @@ async fn load_profiles() -> Result<Vec<GitProfile>, String> {
         return Ok(Vec::new());
     }
     
-    let json = read_encrypted_file(&profiles_file)?;
+    let encrypted = fs::read_to_string(&profiles_file)
+        .map_err(|e| format!("Failed to read profiles file: {}", e))?;
+        
+    // Decrypt the profiles data
+    let json = decrypt_string(&encrypted)?;
     
     serde_json::from_str(&json)
         .map_err(|e| format!("Failed to deserialize profiles: {}", e))
@@ -172,10 +179,19 @@ fn load_config() -> Result<AppConfig, String> {
         return Ok(config);
     }
 
-    let config_str = read_encrypted_file(&config_path)?;
+    // Read config as plain JSON
+    let config_str = fs::read_to_string(&config_path)
+        .map_err(|e| format!("Failed to read config file: {}", e))?;
     
-    serde_json::from_str(&config_str)
-        .map_err(|e| format!("Failed to parse config file: {}", e))
+    let config: AppConfig = serde_json::from_str(&config_str)
+        .map_err(|e| format!("Failed to parse config file: {}", e))?;
+    
+    // If there's an encryption key, set it
+    if let Some(key) = &config.encryption_key {
+        set_encryption_key(key)?;
+    }
+    
+    Ok(config)
 }
 
 fn save_config(config: &AppConfig) -> Result<(), String> {
@@ -187,10 +203,12 @@ fn save_config(config: &AppConfig) -> Result<(), String> {
             .map_err(|e| format!("Failed to create config directory: {}", e))?;
     }
     
+    // Save config as plain JSON
     let config_str = serde_json::to_string_pretty(config)
         .map_err(|e| format!("Failed to serialize config: {}", e))?;
     
-    write_encrypted_file(&config_path, &config_str)
+    fs::write(&config_path, config_str)
+        .map_err(|e| format!("Failed to write config file: {}", e))
 }
 // Add this function to initialize encryption on startup
 fn initialize_encryption() -> Result<(), String> {
@@ -243,9 +261,14 @@ async fn get_profiles_dir() -> Result<String, String> {
 #[command]
 async fn update_encryption_key(key: String) -> Result<(), String> {
     let mut config = APP_CONFIG.lock().map_err(|e| e.to_string())?;
-    config.encryption_key = Some(key.clone());
-    save_config(&config)?;
+    
+    // Try to set the new encryption key
     set_encryption_key(&key)?;
+    
+    // Update config with the new key
+    config.encryption_key = Some(key);
+    save_config(&config)?;
+    
     Ok(())
 }
 

@@ -5,7 +5,6 @@ use aes_gcm::{
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use std::fs;
 use once_cell::sync::Lazy;
 use std::sync::Mutex;
 
@@ -26,11 +25,6 @@ pub fn set_encryption_key(key: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub fn get_encryption_key() -> Result<String, String> {
-    let key = ENCRYPTION_KEY.lock().map_err(|e| e.to_string())?;
-    String::from_utf8(key.clone()).map_err(|e| e.to_string())
-}
-
 #[derive(Serialize, Deserialize)]
 pub struct EncryptedData {
     pub nonce: String,
@@ -39,6 +33,9 @@ pub struct EncryptedData {
 
 pub fn encrypt_string(data: &str) -> Result<String, String> {
     let key_data = ENCRYPTION_KEY.lock().map_err(|e| e.to_string())?;
+    if key_data.is_empty() {
+        return Err("Encryption key not set".to_string());
+    }
     let key = Key::<Aes256Gcm>::from_slice(&key_data);
     let cipher = Aes256Gcm::new(key);
     
@@ -61,6 +58,10 @@ pub fn encrypt_string(data: &str) -> Result<String, String> {
 }
 
 pub fn decrypt_string(encrypted_json: &str) -> Result<String, String> {
+    let key_data = ENCRYPTION_KEY.lock().map_err(|e| e.to_string())?;
+    if key_data.is_empty() {
+        return Err("Encryption key not set".to_string());
+    }
     // Parse encrypted data
     let encrypted_data: EncryptedData = serde_json::from_str(encrypted_json)
         .map_err(|e| format!("Failed to parse encrypted data: {}", e))?;
@@ -74,7 +75,6 @@ pub fn decrypt_string(encrypted_json: &str) -> Result<String, String> {
         .map_err(|e| format!("Failed to decode ciphertext: {}", e))?;
     
     // Get the current encryption key
-    let key_data = ENCRYPTION_KEY.lock().map_err(|e| e.to_string())?;
     let key = Key::<Aes256Gcm>::from_slice(&key_data);
     let cipher = Aes256Gcm::new(key);
     let nonce = Nonce::from_slice(&nonce_bytes);
@@ -86,16 +86,4 @@ pub fn decrypt_string(encrypted_json: &str) -> Result<String, String> {
     
     String::from_utf8(plaintext)
         .map_err(|e| format!("Failed to convert decrypted data to string: {}", e))
-}
-
-pub fn write_encrypted_file(path: &std::path::Path, content: &str) -> Result<(), String> {
-    let encrypted = encrypt_string(content)?;
-    fs::write(path, encrypted)
-        .map_err(|e| format!("Failed to write encrypted file: {}", e))
-}
-
-pub fn read_encrypted_file(path: &std::path::Path) -> Result<String, String> {
-    let encrypted = fs::read_to_string(path)
-        .map_err(|e| format!("Failed to read encrypted file: {}", e))?;
-    decrypt_string(&encrypted)
 }
