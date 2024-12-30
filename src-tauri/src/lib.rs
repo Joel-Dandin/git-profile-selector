@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use once_cell::sync::Lazy;
 use opener;
+mod encryption; // Add this at the top
+use crate::encryption::{write_encrypted_file, read_encrypted_file, set_encryption_key};
 
 // App configuration structure
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -16,6 +18,7 @@ pub struct AppConfig {
     theme: String,
     backup_enabled: bool,
     auto_backup_interval: u32, // in minutes
+    encryption_key: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -53,10 +56,7 @@ async fn save_profiles(profiles: Vec<GitProfile>) -> Result<(), String> {
     let json = serde_json::to_string_pretty(&profiles)
         .map_err(|e| format!("Failed to serialize profiles: {}", e))?;
     
-    fs::write(&profiles_file, json)
-        .map_err(|e| format!("Failed to write profiles: {}", e))?;
-    
-    Ok(())
+    write_encrypted_file(&profiles_file, &json)
 }
 
 #[command]
@@ -70,8 +70,7 @@ async fn load_profiles() -> Result<Vec<GitProfile>, String> {
         return Ok(Vec::new());
     }
     
-    let json = fs::read_to_string(&profiles_file)
-        .map_err(|e| format!("Failed to read profiles: {}", e))?;
+    let json = read_encrypted_file(&profiles_file)?;
     
     serde_json::from_str(&json)
         .map_err(|e| format!("Failed to deserialize profiles: {}", e))
@@ -152,6 +151,7 @@ impl Default for AppConfig {
             theme: "system".to_string(),
             backup_enabled: true,
             auto_backup_interval: 60,
+            encryption_key: None,
         }
     }
 }
@@ -172,8 +172,7 @@ fn load_config() -> Result<AppConfig, String> {
         return Ok(config);
     }
 
-    let config_str = fs::read_to_string(&config_path)
-        .map_err(|e| format!("Failed to read config file: {}", e))?;
+    let config_str = read_encrypted_file(&config_path)?;
     
     serde_json::from_str(&config_str)
         .map_err(|e| format!("Failed to parse config file: {}", e))
@@ -191,8 +190,15 @@ fn save_config(config: &AppConfig) -> Result<(), String> {
     let config_str = serde_json::to_string_pretty(config)
         .map_err(|e| format!("Failed to serialize config: {}", e))?;
     
-    fs::write(&config_path, config_str)
-        .map_err(|e| format!("Failed to write config file: {}", e))
+    write_encrypted_file(&config_path, &config_str)
+}
+// Add this function to initialize encryption on startup
+fn initialize_encryption() -> Result<(), String> {
+    let config = APP_CONFIG.lock().map_err(|e| e.to_string())?;
+    if let Some(key) = &config.encryption_key {
+        set_encryption_key(key)?;
+    }
+    Ok(())
 }
 
 #[command]
@@ -205,6 +211,12 @@ async fn get_app_config() -> Result<AppConfig, String> {
 async fn update_app_config(config: AppConfig) -> Result<(), String> {
     let mut current_config = APP_CONFIG.lock().map_err(|e| e.to_string())?;
     *current_config = config.clone();
+    
+    // If there's an encryption key, update it
+    if let Some(key) = &config.encryption_key {
+        set_encryption_key(key)?;
+    }
+    
     save_config(&config)
 }
 
@@ -228,8 +240,26 @@ async fn get_profiles_dir() -> Result<String, String> {
     Ok(config.profiles_dir.clone())
 }
 
+#[command]
+async fn update_encryption_key(key: String) -> Result<(), String> {
+    let mut config = APP_CONFIG.lock().map_err(|e| e.to_string())?;
+    config.encryption_key = Some(key.clone());
+    save_config(&config)?;
+    set_encryption_key(&key)?;
+    Ok(())
+}
+
+#[command]
+async fn is_encryption_setup() -> Result<bool, String> {
+    let config = APP_CONFIG.lock().map_err(|e| e.to_string())?;
+    Ok(config.encryption_key.is_some())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    if let Err(e) = initialize_encryption() {
+        eprintln!("Failed to initialize encryption: {}", e);
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![update_git_config,
@@ -240,7 +270,9 @@ pub fn run() {
             get_app_config,
             update_app_config,
             get_profiles_dir,
-            open_git_config])
+            open_git_config,
+            update_encryption_key,
+            is_encryption_setup,])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

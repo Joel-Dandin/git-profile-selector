@@ -3,12 +3,13 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
-import { Moon, Sun, ArrowLeft } from "lucide-react";
+import { Moon, Sun, ArrowLeft, Lock } from "lucide-react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { invoke } from '@tauri-apps/api/core';
 import { Switch } from "../components/ui/switch";
+import { Alert, AlertDescription } from "../components/ui/alert";
 
 
 interface AppConfig {
@@ -16,6 +17,7 @@ interface AppConfig {
   theme: string;
   backup_enabled: boolean;
   auto_backup_interval: number;
+  encryption_key?: string;
 }
 
 const Settings = () => {
@@ -23,6 +25,10 @@ const Settings = () => {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [profilesPath, setProfilesPath] = useState("");
   const [backupEnabled, setBackupEnabled] = useState<Boolean>(true);
+  const [encryptionKey, setEncryptionKey] = useState("");
+  const [isEncryptionSetup, setIsEncryptionSetup] = useState(false);
+  const [showKey, setShowKey] = useState(false);
+
   useEffect(() => {
     loadConfig();
   }, []);
@@ -35,6 +41,31 @@ const Settings = () => {
       setBackupEnabled(appConfig.backup_enabled);
     } catch (error) {
       toast.error("Failed to load configuration");
+    }
+  };
+
+  const checkEncryptionStatus = async () => {
+    try {
+      const isSetup = await invoke<boolean>("is_encryption_setup");
+      setIsEncryptionSetup(isSetup);
+    } catch (error) {
+      toast.error("Failed to check encryption status");
+    }
+  };
+
+  const handleUpdateEncryption = async () => {
+    if (!encryptionKey) {
+      toast.error("Please enter an encryption key");
+      return;
+    }
+
+    try {
+      await invoke("update_encryption_key", { key: encryptionKey });
+      toast.success("Encryption key updated successfully");
+      setIsEncryptionSetup(true);
+      setShowKey(false);
+    } catch (error) {
+      toast.error("Failed to update encryption key");
     }
   };
 
@@ -76,7 +107,7 @@ const Settings = () => {
   return (
     <div className="container py-8 transition-colors duration-200">
       <div className="max-w-2xl mx-auto space-y-6">
-      <div className="flex items-center gap-4 mb-8">
+        <div className="flex items-center gap-4 mb-8">
           <Link to="/">
             <Button variant="ghost" size="icon">
               <ArrowLeft className="h-5 w-5" />
@@ -84,7 +115,7 @@ const Settings = () => {
           </Link>
           <h1 className="text-3xl font-bold">Settings</h1>
         </div>
-        
+
         <Card className="backdrop-blur-sm bg-background/95">
           <CardHeader>
             <CardTitle>Appearance</CardTitle>
@@ -130,7 +161,7 @@ const Settings = () => {
                   value={profilesPath}
                   onChange={(e) => setProfilesPath(e.target.value)}
                   placeholder="/path/to/profiles"
-                   className="bg-background/50"
+                  className="bg-background/50"
                 />
                 <Button onClick={handleSaveProfilesPath}>Save</Button>
               </div>
@@ -150,6 +181,47 @@ const Settings = () => {
                 checked={backupEnabled}
                 onCheckedChange={handleBackupToggle}
               />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="backdrop-blur-sm bg-background/95">
+          <CardHeader>
+            <CardTitle>Security Settings</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="encryptionKey">File Encryption Key</Label>
+              <div className="flex space-x-2">
+                <Input
+                  id="encryptionKey"
+                  type={showKey ? "text" : "password"}
+                  value={encryptionKey}
+                  onChange={(e) => setEncryptionKey(e.target.value)}
+                  placeholder="Enter encryption key"
+                  className="bg-background/50"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setShowKey(!showKey)}
+                  title={showKey ? "Hide key" : "Show key"}
+                >
+                  <Lock className="w-4 h-4" />
+                </Button>
+                <Button onClick={handleUpdateEncryption}>
+                  {isEncryptionSetup ? "Update" : "Set"} Key
+                </Button>
+              </div>
+              {isEncryptionSetup && (
+                <Alert>
+                  <AlertDescription>
+                    Files are currently encrypted. Changing the key will re-encrypt all files.
+                  </AlertDescription>
+                </Alert>
+              )}
+              <p className="text-sm text-muted-foreground">
+                This key will be used to encrypt your profile and configuration files
+              </p>
             </div>
           </CardContent>
         </Card>
