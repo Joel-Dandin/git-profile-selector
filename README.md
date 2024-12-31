@@ -24,7 +24,7 @@ Git Profile Switcher is a desktop application that allows users to easily switch
 1. Clone the repository:
 
 ```sh
-git clone https://github.com/Joel-Dandin/github-profile-selector.git
+git clone https://github.com/Joel-Dandin/git-profile-selector.git
 cd git-profile-switcher
 ```
 
